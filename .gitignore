@@ -1,0 +1,38 @@
+# JetBrains IDE
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+.run/
+
+# Gradle
+.gradle/
+build/
+*/build/
+
+# Android
+local.properties
+.externalNativeBuild
+.cxx/
+*.apk
+*.ap_
+*.dex
+*.class
+bin/
+gen/
+proguard/
+*.log
+
+# Kotlin
+.kotlin/
+.artifacts/
+.agent/
+
+# OS X
+.DS_Store
+
+# Native
+*.so
+*.dylib
+*.dll
