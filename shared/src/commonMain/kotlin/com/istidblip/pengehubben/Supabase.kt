@@ -20,13 +20,18 @@ object Supabase {
     }
 
     val client by lazy {
-        createSupabaseClient(
-            supabaseUrl = SUPABASE_URL,
-            supabaseKey = SUPABASE_ANON_KEY
-        ) {
-            install(Auth)
-            install(Postgrest)
-            install(Realtime)
+        try {
+            createSupabaseClient(
+                supabaseUrl = SUPABASE_URL.trim(),
+                supabaseKey = SUPABASE_ANON_KEY.trim()
+            ) {
+                install(Auth)
+                install(Postgrest)
+                install(Realtime)
+            }
+        } catch (e: Exception) {
+            println("CRITICAL: Failed to create Supabase client: ${e.message}")
+            throw e
         }
     }
 }

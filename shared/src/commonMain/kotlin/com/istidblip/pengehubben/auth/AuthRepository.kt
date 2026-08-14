@@ -8,7 +8,14 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
 class AuthRepository {
-    val sessionStatus = Supabase.client.auth.sessionStatus
+    private val auth = try {
+        Supabase.client.auth
+    } catch (e: Exception) {
+        println("AUTH_ERROR: Could not access Supabase Auth: ${e.message}")
+        null
+    }
+
+    val sessionStatus = auth?.sessionStatus ?: kotlinx.coroutines.flow.MutableStateFlow(SessionStatus.NotAuthenticated())
     
     val isAuthenticated: Flow<Boolean> = sessionStatus.map { it is SessionStatus.Authenticated }
 

@@ -22,6 +22,7 @@ import org.jetbrains.compose.ui.tooling.preview.Preview
 @Composable
 fun StockCard(
     stock: StockPrice,
+    currencyCode: String = "USD",
     modifier: Modifier = Modifier,
     onClick: () -> Unit = {}
 ) {
@@ -85,7 +86,7 @@ fun StockCard(
                 
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = stock.price.formatCurrency(),
+                        text = stock.price.formatCurrency(currencyCode),
                         style = MaterialTheme.typography.headlineSmall
                     )
                     if (priceChangeDirection != 0) {
@@ -113,7 +114,7 @@ fun StockCard(
 fun StockCardPreview() {
     MaterialTheme {
         StockCard(
-            stock = StockPrice("AAPL", 150.0, 1.2, 0L)
+            stock = StockPrice("AAPL", "Apple Inc.", 150.0, 1.2, 0L)
         )
     }
 }

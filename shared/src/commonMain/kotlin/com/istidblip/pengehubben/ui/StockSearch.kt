@@ -78,7 +78,7 @@ fun StockSearch(
                     items(results) { stock ->
                         ListItem(
                             headlineContent = { Text(stock.symbol) },
-                            supportingContent = { Text("$${stock.price}") },
+                            supportingContent = { Text(stock.name ?: "") },
                             trailingContent = {
                                 IconButton(onClick = { viewModel.addStock(stock); onBack() }) {
                                     Icon(Icons.Default.Add, "Add")

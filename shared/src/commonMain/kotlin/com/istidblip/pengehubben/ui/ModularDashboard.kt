@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.material3.adaptive.ExperimentalMaterial3AdaptiveApi
@@ -42,6 +43,7 @@ fun ModularDashboard(
         listPane = {
             DashboardListPane(
                 modules = modules,
+                viewModel = viewModel,
                 onStockClick = { stock ->
                     viewModel.selectStock(stock)
                     scope.launch {
@@ -54,6 +56,7 @@ fun ModularDashboard(
         detailPane = {
             StockDetailPane(
                 stock = selectedStock,
+                viewModel = viewModel,
                 onBack = {
                     scope.launch {
                         navigator.navigateBack()
@@ -64,13 +67,35 @@ fun ModularDashboard(
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardListPane(
     modules: List<DashboardModule>,
+    viewModel: DashboardViewModel,
     onStockClick: (StockPrice) -> Unit,
     onNavigateToSearch: () -> Unit
 ) {
+    val currency by viewModel.selectedCurrency.collectAsState()
+    val rate by viewModel.usdToNokRate.collectAsState()
+
     Scaffold(
+        topBar = {
+            CenterAlignedTopAppBar(
+                title = { 
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("Pengehubben")
+                        if (currency == "NOK") {
+                            Text("Rate: 1 USD = $rate NOK", style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                },
+                actions = {
+                    TextButton(onClick = { viewModel.toggleCurrency() }) {
+                        Text(currency)
+                    }
+                }
+            )
+        },
         floatingActionButton = {
             ExtendedFloatingActionButton(
                 onClick = onNavigateToSearch,
@@ -105,10 +130,18 @@ fun DashboardListPane(
                     items(modules) { module ->
                         when (module) {
                             is DashboardModule.Stock -> StockCard(
-                                stock = module.stockPrice,
+                                stock = module.stockPrice.copy(
+                                    price = viewModel.getConvertedPrice(module.stockPrice.price)
+                                ),
+                                currencyCode = currency,
                                 onClick = { onStockClick(module.stockPrice) }
                             )
-                            is DashboardModule.Summary -> SummaryCard(module = module)
+                            is DashboardModule.Summary -> SummaryCard(
+                                module = module.copy(
+                                    totalValue = viewModel.getConvertedPrice(module.totalValue)
+                                ),
+                                currencyCode = currency
+                            )
                         }
                     }
                 }
@@ -121,8 +154,12 @@ fun DashboardListPane(
 @Composable
 fun StockDetailPane(
     stock: StockPrice?,
+    viewModel: DashboardViewModel,
     onBack: () -> Unit
 ) {
+    val candles by viewModel.stockCandles.collectAsState()
+    val currency by viewModel.selectedCurrency.collectAsState()
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -130,6 +167,16 @@ fun StockDetailPane(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    if (stock != null) {
+                        IconButton(onClick = { 
+                            viewModel.removeStock(stock.symbol)
+                            onBack()
+                        }) {
+                            Icon(Icons.Default.Delete, contentDescription = "Remove Stock")
+                        }
                     }
                 }
             )
@@ -147,7 +194,7 @@ fun StockDetailPane(
                     style = MaterialTheme.typography.displayMedium
                 )
                 Text(
-                    text = "Current Price: ${stock.price.formatCurrency()}",
+                    text = "Current Price: ${viewModel.getConvertedPrice(stock.price).formatCurrency(currency)}",
                     style = MaterialTheme.typography.headlineMedium
                 )
                 Spacer(modifier = Modifier.height(16.dp))
@@ -159,13 +206,25 @@ fun StockDetailPane(
                 
                 Spacer(modifier = Modifier.height(32.dp))
                 
-                // Placeholder for chart
+                Text(
+                    text = "Last 30 Days",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+
                 Card(
                     modifier = Modifier.fillMaxWidth().height(200.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                 ) {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("Performance Chart Placeholder")
+                    if (candles.isEmpty()) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator()
+                        }
+                    } else {
+                        StockChart(
+                            candles = candles,
+                            modifier = Modifier.padding(16.dp)
+                        )
                     }
                 }
             }
@@ -178,7 +237,10 @@ fun StockDetailPane(
 }
 
 @Composable
-fun SummaryCard(module: DashboardModule.Summary) {
+fun SummaryCard(
+    module: DashboardModule.Summary,
+    currencyCode: String
+) {
     val isPositive = module.dailyChange >= 0
     val trendColor = if (isPositive) androidx.compose.ui.graphics.Color(0xFF4CAF50) else androidx.compose.ui.graphics.Color(0xFFF44336)
 
@@ -200,7 +262,7 @@ fun SummaryCard(module: DashboardModule.Summary) {
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = module.totalValue.formatCurrency(),
+                text = module.totalValue.formatCurrency(currencyCode),
                 style = MaterialTheme.typography.headlineLarge,
                 color = MaterialTheme.colorScheme.onPrimaryContainer
             )

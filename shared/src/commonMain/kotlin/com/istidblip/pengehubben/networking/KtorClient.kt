@@ -18,7 +18,7 @@ fun createHttpClient(): HttpClient {
             })
         }
         install(Logging) {
-            level = LogLevel.ALL
+            level = LogLevel.INFO // Changed from ALL to reduce iOS background overhead
         }
         install(WebSockets) {
             contentConverter = io.ktor.serialization.kotlinx.KotlinxWebsocketSerializationConverter(Json {

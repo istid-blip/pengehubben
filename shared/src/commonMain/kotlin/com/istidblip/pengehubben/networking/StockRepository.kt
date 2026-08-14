@@ -10,6 +10,7 @@ import io.ktor.websocket.readText
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.jsonArray
@@ -20,7 +21,44 @@ import kotlinx.serialization.json.longOrNull
 interface StockRepository {
     suspend fun getStockPrice(symbol: String): StockPrice
     fun observeStockPrice(symbol: String): Flow<StockPrice>
+    suspend fun searchSymbols(query: String): List<SymbolLookupResult>
+    suspend fun getStockCandles(symbol: String, from: Long, to: Long): List<StockCandle>
 }
+
+@Serializable
+data class StockCandleResponse(
+    val c: List<Double>,
+    val h: List<Double>,
+    val l: List<Double>,
+    val o: List<Double>,
+    val s: String,
+    val t: List<Long>,
+    val v: List<Long>
+)
+
+@Serializable
+data class StockCandle(
+    val close: Double,
+    val high: Double,
+    val low: Double,
+    val open: Double,
+    val timestamp: Long,
+    val volume: Long
+)
+
+@Serializable
+data class SymbolLookupResponse(
+    val count: Int,
+    val result: List<SymbolLookupResult>
+)
+
+@Serializable
+data class SymbolLookupResult(
+    val description: String,
+    val displaySymbol: String,
+    val symbol: String,
+    val type: String
+)
 
 class FinnhubStockRepository(
     private val client: HttpClient,
@@ -32,6 +70,49 @@ class FinnhubStockRepository(
             parameter("symbol", symbol)
             parameter("token", apiKey)
         }.body()
+    }
+
+    override suspend fun searchSymbols(query: String): List<SymbolLookupResult> {
+        return try {
+            val response: SymbolLookupResponse = client.get("https://finnhub.io/api/v1/search") {
+                parameter("q", query)
+                parameter("token", apiKey)
+            }.body()
+            response.result
+        } catch (e: Exception) {
+            println("Error searching symbols: ${e.message}")
+            emptyList()
+        }
+    }
+
+    override suspend fun getStockCandles(symbol: String, from: Long, to: Long): List<StockCandle> {
+        return try {
+            val response: StockCandleResponse = client.get("https://finnhub.io/api/v1/stock/candle") {
+                parameter("symbol", symbol)
+                parameter("resolution", "D")
+                parameter("from", from)
+                parameter("to", to)
+                parameter("token", apiKey)
+            }.body()
+            
+            if (response.s == "ok") {
+                response.t.indices.map { i ->
+                    StockCandle(
+                        close = response.c[i],
+                        high = response.h[i],
+                        low = response.l[i],
+                        open = response.o[i],
+                        timestamp = response.t[i],
+                        volume = response.v[i]
+                    )
+                }
+            } else {
+                emptyList()
+            }
+        } catch (e: Exception) {
+            println("Error fetching candles for $symbol: ${e.message}")
+            emptyList()
+        }
     }
 
     override fun observeStockPrice(symbol: String): Flow<StockPrice> = flow {

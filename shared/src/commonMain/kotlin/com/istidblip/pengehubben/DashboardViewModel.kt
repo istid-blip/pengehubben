@@ -6,12 +6,16 @@ import com.istidblip.pengehubben.networking.FinnhubStockRepository
 import com.istidblip.pengehubben.networking.StockRepository
 import com.istidblip.pengehubben.networking.SupabaseRepository
 import com.istidblip.pengehubben.networking.createHttpClient
+import kotlinx.coroutines.CoroutineExceptionHandler
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import io.ktor.util.date.GMTDate
 
 class DashboardViewModel(
     private val supabaseRepo: SupabaseRepository = SupabaseRepository(),
@@ -20,6 +24,11 @@ class DashboardViewModel(
         apiKey = BuildConfig.FINNHUB_API_KEY
     )
 ) : ViewModel() {
+    private val exceptionHandler = CoroutineExceptionHandler { _, throwable ->
+        println("DASHBOARD_VM_ERROR: Uncaught exception in ViewModel: ${throwable.message}")
+        throwable.printStackTrace()
+    }
+
     private val _modules = MutableStateFlow<List<DashboardModule>>(emptyList())
     val modules: StateFlow<List<DashboardModule>> = _modules.asStateFlow()
 
@@ -29,13 +38,22 @@ class DashboardViewModel(
     private val _isSearching = MutableStateFlow(false)
     val isSearching: StateFlow<Boolean> = _isSearching.asStateFlow()
 
+    private val _selectedCurrency = MutableStateFlow("USD")
+    val selectedCurrency: StateFlow<String> = _selectedCurrency.asStateFlow()
+
+    private val _usdToNokRate = MutableStateFlow(10.5) // Fallback rate
+    val usdToNokRate: StateFlow<Double> = _usdToNokRate.asStateFlow()
+
     private val _selectedStock = MutableStateFlow<StockPrice?>(null)
     val selectedStock: StateFlow<StockPrice?> = _selectedStock.asStateFlow()
+
+    private val _stockCandles = MutableStateFlow<List<com.istidblip.pengehubben.networking.StockCandle>>(emptyList())
+    val stockCandles: StateFlow<List<com.istidblip.pengehubben.networking.StockCandle>> = _stockCandles.asStateFlow()
 
     private val observationJobs = mutableMapOf<String, Job>()
 
     init {
-        viewModelScope.launch {
+        viewModelScope.launch(exceptionHandler) {
             try {
                 println("Initializing DashboardViewModel...")
                 // Load initial dashboard config
@@ -65,7 +83,7 @@ class DashboardViewModel(
                     // Start observing new symbols
                     symbols.forEach { symbol ->
                         if (!observationJobs.containsKey(symbol)) {
-                            observationJobs[symbol] = viewModelScope.launch {
+                            observationJobs[symbol] = viewModelScope.launch(exceptionHandler) {
                                 stockRepo.observeStockPrice(symbol).collectLatest { networkPrice ->
                                     updateStockPriceInModules(symbol, networkPrice)
                                 }
@@ -85,12 +103,16 @@ class DashboardViewModel(
                             // Placeholder while loading
                             newModules.add(DashboardModule.Stock(
                                 id = "stock-${symbol.lowercase()}",
-                                stockPrice = StockPrice(symbol, 0.0, 0.0, 0)
+                                stockPrice = StockPrice(symbol, null, 0.0, 0.0, 0)
                             ))
                         }
                     }
                     _modules.value = newModules
-                    supabaseRepo.saveDashboardConfig(_modules.value)
+                    
+                    // Lagre kun hvis vi faktisk har moduler og brukeren er logget inn (ikke bare fallback data)
+                    if (symbols.isNotEmpty()) {
+                        supabaseRepo.saveDashboardConfig(_modules.value)
+                    }
                 }
             } catch (e: Exception) {
                 println("Critical error in DashboardViewModel init: ${e.message}")
@@ -99,44 +121,46 @@ class DashboardViewModel(
     }
 
     private fun updateStockPriceInModules(symbol: String, networkPrice: com.istidblip.pengehubben.networking.StockPrice) {
-        val updatedPrice = StockPrice(
-            symbol = symbol,
-            price = networkPrice.currentPrice,
-            change = networkPrice.percentChange,
-            timestamp = networkPrice.timestamp
-        )
-
         val currentModules = _modules.value.toMutableList()
         val index = currentModules.indexOfFirst { it is DashboardModule.Stock && it.stockPrice.symbol == symbol }
         
         if (index != -1) {
+            val existingStock = (currentModules[index] as DashboardModule.Stock).stockPrice
+            val updatedPrice = StockPrice(
+                symbol = symbol,
+                name = existingStock.name,
+                price = networkPrice.currentPrice,
+                change = networkPrice.percentChange,
+                timestamp = networkPrice.timestamp
+            )
             currentModules[index] = DashboardModule.Stock(
                 id = (currentModules[index] as DashboardModule.Stock).id,
                 stockPrice = updatedPrice
             )
-            _modules.value = currentModules
+            
+            // Sikrer at oppdateringen av StateFlow skjer på Main-tråden for iOS-stabilitet
+            viewModelScope.launch(Dispatchers.Main) {
+                _modules.value = currentModules
+            }
         }
     }
 
     fun searchStocks(query: String) {
         viewModelScope.launch {
-            if (query.isBlank()) {
+            if (query.length < 2) {
                 _searchResults.value = emptyList()
                 return@launch
             }
             _isSearching.value = true
-            // Mock search results for now, should use stockRepo in production
-            val mockAllStocks = listOf(
-                StockPrice("AAPL", 150.0, 1.2, 0),
-                StockPrice("GOOGL", 2800.0, -0.5, 0),
-                StockPrice("MSFT", 300.0, 0.8, 0),
-                StockPrice("AMZN", 3300.0, 1.5, 0),
-                StockPrice("TSLA", 700.0, -2.0, 0),
-                StockPrice("META", 350.0, 0.3, 0),
-                StockPrice("NFLX", 500.0, -1.0, 0)
-            )
-            _searchResults.value = mockAllStocks.filter { 
-                it.symbol.contains(query, ignoreCase = true) 
+            val results = stockRepo.searchSymbols(query)
+            _searchResults.value = results.map { result ->
+                StockPrice(
+                    symbol = result.symbol,
+                    name = result.description,
+                    price = 0.0,
+                    change = 0.0,
+                    timestamp = 0
+                )
             }
             _isSearching.value = false
         }
@@ -161,5 +185,31 @@ class DashboardViewModel(
 
     fun selectStock(stock: StockPrice?) {
         _selectedStock.value = stock
+        if (stock != null) {
+            viewModelScope.launch {
+                try {
+                    // Bruker Ktor sin GMTDate som en trygg fallback for å få tid
+                    val nowSeconds = GMTDate().timestamp / 1000
+                    val thirtyDaysAgo = nowSeconds - (30 * 24 * 60 * 60)
+                    _stockCandles.value = stockRepo.getStockCandles(stock.symbol, thirtyDaysAgo, nowSeconds)
+                } catch (e: Exception) {
+                    println("Klarte ikke hente historikk: ${e.message}")
+                }
+            }
+        } else {
+            _stockCandles.value = emptyList()
+        }
+    }
+
+    fun toggleCurrency() {
+        _selectedCurrency.value = if (_selectedCurrency.value == "USD") "NOK" else "USD"
+    }
+
+    fun getConvertedPrice(usdPrice: Double): Double {
+        return if (_selectedCurrency.value == "NOK") {
+            usdPrice * _usdToNokRate.value
+        } else {
+            usdPrice
+        }
     }
 }

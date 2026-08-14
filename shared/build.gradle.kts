@@ -34,7 +34,7 @@ kotlin {
         minSdk = 24
         
         compilerOptions {
-            jvmTarget.set(JvmTarget.JVM_11)
+            jvmTarget.set(JvmTarget.JVM_17)
         }
         
         androidResources {
@@ -67,6 +67,7 @@ kotlin {
             implementation(libs.kotlinx.coroutines.core)
             implementation(libs.kotlinx.serialization.core)
             implementation(libs.kotlinx.serialization.json)
+            implementation(libs.kotlinx.datetime)
             
             implementation(libs.ktor.client.core)
             implementation(libs.ktor.client.content.negotiation)

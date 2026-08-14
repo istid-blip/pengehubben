@@ -5,6 +5,7 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class StockPrice(
     val symbol: String,
+    val name: String? = null,
     val price: Double,
     val change: Double,
     val timestamp: Long
@@ -17,7 +18,11 @@ data class PortfolioItem(
     val averagePrice: Double
 )
 
-fun Double.formatCurrency(): String {
+fun Double.formatCurrency(currencyCode: String = "USD"): String {
+    val symbol = when (currencyCode) {
+        "NOK" -> "kr"
+        else -> "$"
+    }
     val absoluteValue = if (this < 0) -this else this
     val parts = absoluteValue.toString().split(".")
     val integerPart = parts[0]
@@ -25,7 +30,12 @@ fun Double.formatCurrency(): String {
     
     val formattedInteger = integerPart.reversed().chunked(3).joinToString(",").reversed()
     val sign = if (this < 0) "-" else ""
-    return "$sign$$formattedInteger.$decimalPart"
+    
+    return if (currencyCode == "NOK") {
+        "$sign$formattedInteger,$decimalPart $symbol"
+    } else {
+        "$sign$symbol$formattedInteger.$decimalPart"
+    }
 }
 
 @Serializable
