@@ -75,15 +75,13 @@ kotlin {
             implementation(libs.ktor.client.websockets)
             implementation(libs.ktor.serialization.kotlinx.json)
 
-            implementation(libs.androidx.navigation3.ui)
-            implementation(libs.androidx.navigation.compose)
+            implementation(libs.jetbrains.navigation.compose)
             implementation(libs.jetbrains.compose.adaptive)
             implementation(libs.jetbrains.compose.adaptive.layout)
-            implementation(libs.jetbrains.compose.adaptive.navigation3)
-            implementation(libs.androidx.lifecycle.viewmodel.navigation3)
+            implementation(libs.jetbrains.compose.adaptive.navigation)
             implementation(libs.androidx.lifecycle.viewmodel.compose)
             implementation(libs.androidx.lifecycle.runtime.compose)
-            
+
             implementation(libs.supabase.postgrest)
             implementation(libs.supabase.auth)
             implementation(libs.supabase.realtime)
@@ -102,8 +100,7 @@ kotlin {
             dependencies {
                 implementation(libs.ktor.client.cio)
                 implementation(libs.kotlinx.coroutines.swing)
-                implementation(libs.androidx.navigation3.ui)
-                implementation(libs.androidx.navigation.compose)
+                implementation(libs.jetbrains.navigation.compose)
                 implementation(libs.androidx.lifecycle.runtime.compose)
                 implementation(libs.androidx.lifecycle.viewmodel.compose)
             }
