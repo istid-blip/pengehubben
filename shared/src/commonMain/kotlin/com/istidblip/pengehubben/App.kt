@@ -10,24 +10,18 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.navigation3.runtime.NavBackStack
-import androidx.navigation3.runtime.NavEntry
-import androidx.navigation3.runtime.NavKey
-import androidx.navigation3.runtime.rememberNavBackStack
-import androidx.navigation3.ui.NavDisplay
-import androidx.savedstate.serialization.SavedStateConfiguration
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
 import com.istidblip.pengehubben.auth.AuthRepository
 import com.istidblip.pengehubben.ui.LoginScreen
 import com.istidblip.pengehubben.ui.ModularDashboard
 import com.istidblip.pengehubben.ui.StockSearch
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.modules.SerializersModule
-import kotlinx.serialization.modules.polymorphic
-import kotlinx.serialization.modules.subclass
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
 @Serializable
-sealed interface Route : NavKey
+sealed interface Route
 
 @Serializable
 data object LoginRoute : Route
@@ -38,61 +32,60 @@ data object DashboardRoute : Route
 @Serializable
 data object SearchRoute : Route
 
-private val config = SavedStateConfiguration {
-    serializersModule = SerializersModule {
-        polymorphic(NavKey::class) {
-            subclass(LoginRoute::class, LoginRoute.serializer())
-            subclass(DashboardRoute::class, DashboardRoute.serializer())
-            subclass(SearchRoute::class, SearchRoute.serializer())
-        }
-    }
-}
-
 @Composable
 @Preview
 fun App() {
     MaterialTheme {
         Surface(
             modifier = Modifier.fillMaxSize(),
-            color = MaterialTheme.colorScheme.background
+            color = MaterialTheme.colorScheme.background,
         ) {
             val authRepository = remember { AuthRepository() }
             val isAuthenticated by authRepository.isAuthenticated.collectAsState(initial = false)
 
             val viewModel: DashboardViewModel = viewModel { DashboardViewModel() }
-            val backStack = rememberNavBackStack(config, if (isAuthenticated) DashboardRoute else LoginRoute)
+            val navController = rememberNavController()
 
             LaunchedEffect(isAuthenticated) {
-                if (!isAuthenticated) {
-                    // Navigate to Login if not authenticated
-                    if (backStack.all { it !is LoginRoute }) {
-                        while (backStack.isNotEmpty()) {
-                            backStack.removeAt(backStack.size - 1)
-                        }
-                        backStack.add(LoginRoute)
+                if (isAuthenticated) {
+                    navController.navigate(DashboardRoute) {
+                        popUpTo(LoginRoute) { inclusive = true }
+                        launchSingleTop = true
+                    }
+                } else {
+                    navController.navigate(LoginRoute) {
+                        popUpTo(0) { inclusive = true }
+                        launchSingleTop = true
                     }
                 }
             }
 
-            NavDisplay(
-                backStack = backStack
-            ) { key ->
-                NavEntry(key) { k: NavKey ->
-                    when (k) {
-                        is LoginRoute -> LoginScreen(
-                            onSignIn = { email, pass -> authRepository.signIn(email, pass) },
-                            onSignUp = { email, pass -> authRepository.signUp(email, pass) },
-                            onLoginSuccess = { backStack.add(DashboardRoute) }
-                        )
-                        is DashboardRoute -> ModularDashboard(
-                            viewModel = viewModel,
-                            onNavigateToSearch = { backStack.add(SearchRoute) }
-                        )
-                        is SearchRoute -> StockSearch(
-                            viewModel = viewModel,
-                            onBack = { backStack.removeAt(backStack.size - 1) }
-                        )
-                    }
+            NavHost(
+                navController = navController,
+                startDestination = if (isAuthenticated) DashboardRoute else LoginRoute,
+            ) {
+                composable<LoginRoute> {
+                    LoginScreen(
+                        onSignIn = { email, pass -> authRepository.signIn(email, pass) },
+                        onSignUp = { email, pass -> authRepository.signUp(email, pass) },
+                        onLoginSuccess = {
+                            navController.navigate(DashboardRoute) {
+                                popUpTo(LoginRoute) { inclusive = true }
+                            }
+                        },
+                    )
+                }
+                composable<DashboardRoute> {
+                    ModularDashboard(
+                        viewModel = viewModel,
+                        onNavigateToSearch = { navController.navigate(SearchRoute) },
+                    )
+                }
+                composable<SearchRoute> {
+                    StockSearch(
+                        viewModel = viewModel,
+                        onBack = { navController.popBackStack() },
+                    )
                 }
             }
         }
