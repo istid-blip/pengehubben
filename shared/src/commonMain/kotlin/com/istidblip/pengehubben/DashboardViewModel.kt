@@ -69,17 +69,16 @@ class DashboardViewModel(
     private val observationJobs = mutableMapOf<String, Job>()
 
     init {
+        println("DASHBOARD_VM: !!! MEGA UNIQUE LOG MESSAGE !!!")
+        
+        // Start Supabase sync
         viewModelScope.launch(exceptionHandler) {
             try {
-                println("Initializing DashboardViewModel...")
                 // Load initial dashboard config
                 val config = supabaseRepo.getDashboardConfig()
                 if (config != null) {
-                    println("Dashboard config loaded successfully.")
                     _modules.value = config
                 } else {
-                    println("No dashboard config found, using fallback.")
-                    // Fallback to mock data if no config found
                     _modules.value = listOf(
                         DashboardModule.Summary("summary-1", totalValue = 15000.0, dailyChange = 1.5)
                     )
@@ -87,7 +86,7 @@ class DashboardViewModel(
 
                 // Sync with tracked stocks from Supabase
                 supabaseRepo.getTrackedStocksFlow().collectLatest { entities ->
-                    println("Received ${entities.size} tracked stocks from Supabase.")
+                    println("DASHBOARD_VM: Received ${entities.size} tracked stocks")
                     
                     val symbols = entities.map { it.symbol }
                     
@@ -109,7 +108,6 @@ class DashboardViewModel(
                         }
                     }
                     
-                    // Initial update of modules to include all tracked stocks (some might be loading)
                     val currentStockModules = _modules.value.filterIsInstance<DashboardModule.Stock>()
                     val newModules = _modules.value.filter { it !is DashboardModule.Stock }.toMutableList()
                     
@@ -118,7 +116,6 @@ class DashboardViewModel(
                         if (existing != null) {
                             newModules.add(existing)
                         } else {
-                            // Placeholder while loading
                             newModules.add(DashboardModule.Stock(
                                 id = "stock-${entity.symbol.lowercase()}",
                                 stockPrice = StockPrice(
@@ -127,40 +124,37 @@ class DashboardViewModel(
                                     price = 0.0, 
                                     change = 0.0, 
                                     timestamp = 0,
-                                    type = try { InstrumentType.valueOf(entity.type) } catch(e: Exception) { InstrumentType.STOCK }
+                                    type = try { InstrumentType.valueOf(entity.type) } catch(_: Exception) { InstrumentType.STOCK }
                                 )
                             ))
                         }
                     }
                     _modules.value = newModules
                     
-                    // Lagre kun hvis vi faktisk har moduler og brukeren er logget inn (ikke bare fallback data)
                     if (symbols.isNotEmpty()) {
                         supabaseRepo.saveDashboardConfig(_modules.value)
                     }
                 }
             } catch (e: Exception) {
-                println("Critical error in DashboardViewModel init: ${e.message}")
+                println("DASHBOARD_VM: Error in init job: ${e.message}")
             }
         }
 
-        // Pre-fetch crypto symbols in a separate job so it doesn't wait for Supabase sync
-        println("DASHBOARD_VM: Starting crypto pre-fetch...")
+        // Pre-fetch crypto symbols
         viewModelScope.launch(exceptionHandler) {
             try {
+                println("DASHBOARD_VM: Starting crypto pre-fetch...")
                 val exchanges = listOf("BINANCE", "COINBASE", "KRAKEN")
                 val allCrypto = mutableListOf<com.istidblip.pengehubben.networking.SymbolLookupResult>()
                 exchanges.forEach { exchange ->
-                    println("DASHBOARD_VM: Fetching from $exchange...")
                     val symbols = stockRepo.getCryptoSymbols(exchange)
-                    println("DASHBOARD_VM: Received ${symbols.size} symbols from $exchange")
+                    println("DASHBOARD_VM: Fetched ${symbols.size} from $exchange")
                     allCrypto.addAll(symbols)
                 }
                 _cryptoSymbols.value = allCrypto
-                println("DASHBOARD_VM: Total crypto symbols available: ${allCrypto.size}")
+                println("DASHBOARD_VM: Total crypto symbols: ${allCrypto.size}")
             } catch (e: Exception) {
-                println("DASHBOARD_VM: Error pre-fetching crypto: ${e.message}")
-                e.printStackTrace()
+                println("DASHBOARD_VM: Pre-fetch error: ${e.message}")
             }
         }
     }
@@ -184,7 +178,6 @@ class DashboardViewModel(
                 stockPrice = updatedPrice
             )
             
-            // Sikrer at oppdateringen av StateFlow skjer på Main-tråden for iOS-stabilitet
             viewModelScope.launch(Dispatchers.Main) {
                 _modules.value = currentModules
             }
@@ -192,6 +185,7 @@ class DashboardViewModel(
     }
 
     fun searchStocks(query: String) {
+        println("DASHBOARD_VM: Searching for $query in all tabs")
         viewModelScope.launch {
             if (query.length < 2) {
                 _searchResults.value = emptyList()
@@ -201,11 +195,10 @@ class DashboardViewModel(
             
             val apiResults = stockRepo.searchSymbols(query)
             
-            // For Crypto, we also search in our pre-fetched list
             val cryptoQuery = query.uppercase()
             val localCryptoResults = _cryptoSymbols.value.filter { 
                 it.symbol.contains(cryptoQuery) || it.description.uppercase().contains(cryptoQuery)
-            }.take(20)
+            }.take(50)
 
             val allResults = (apiResults + localCryptoResults).distinctBy { it.symbol }
 
@@ -220,8 +213,7 @@ class DashboardViewModel(
                         result.type.uppercase().contains("FOREX") || result.symbol.contains("/") -> InstrumentType.FOREX
                         result.type.uppercase().contains("INDEX") || result.type.uppercase().contains("INDICES") || result.symbol.startsWith("^") -> InstrumentType.INDEX
                         result.type.uppercase().contains("CRYPTO") || result.symbol.contains(":") || 
-                        result.description.uppercase().contains("BITCOIN") || result.description.uppercase().contains("ETHEREUM") ||
-                        result.symbol.uppercase().contains("USDT") -> InstrumentType.CRYPTO
+                        result.description.uppercase().contains("BITCOIN") || result.description.uppercase().contains("ETHEREUM") -> InstrumentType.CRYPTO
                         else -> InstrumentType.STOCK
                     }
                 )
@@ -274,9 +266,12 @@ class DashboardViewModel(
                     TimeFrame.ONE_YEAR -> nowSeconds - (365 * 24 * 60 * 60)
                     TimeFrame.ALL -> nowSeconds - (10 * 365 * 24 * 60 * 60)
                 }
-                _stockCandles.value = stockRepo.getStockCandles(symbol, fromSeconds, nowSeconds, timeFrame.resolution)
+                println("DASHBOARD_VM: Fetching candles for $symbol ($timeFrame)")
+                val candles = stockRepo.getStockCandles(symbol, fromSeconds, nowSeconds, timeFrame.resolution)
+                _stockCandles.value = candles
+                println("DASHBOARD_VM: Received ${candles.size} candles for $symbol")
             } catch (e: Exception) {
-                println("Klarte ikke hente historikk: ${e.message}")
+                println("DASHBOARD_VM: Error fetching candles: ${e.message}")
             }
         }
     }

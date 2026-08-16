@@ -28,13 +28,13 @@ interface StockRepository {
 
 @Serializable
 data class StockCandleResponse(
-    val c: List<Double>,
-    val h: List<Double>,
-    val l: List<Double>,
-    val o: List<Double>,
-    val s: String,
-    val t: List<Long>,
-    val v: List<Long>
+    val c: List<Double> = emptyList(),
+    val h: List<Double> = emptyList(),
+    val l: List<Double> = emptyList(),
+    val o: List<Double> = emptyList(),
+    val s: String = "no_data",
+    val t: List<Long> = emptyList(),
+    val v: List<Long> = emptyList()
 )
 
 @Serializable
@@ -105,13 +105,17 @@ class FinnhubStockRepository(
 
     override suspend fun getStockCandles(symbol: String, from: Long, to: Long, resolution: String): List<StockCandle> {
         return try {
-            val response: StockCandleResponse = client.get("https://finnhub.io/api/v1/stock/candle") {
+            val url = "https://finnhub.io/api/v1/stock/candle"
+            println("FINNHUB_CANDLES_CALL: symbol=$symbol, res=$resolution, from=$from, to=$to")
+            val response: StockCandleResponse = client.get(url) {
                 parameter("symbol", symbol)
                 parameter("resolution", resolution)
                 parameter("from", from)
                 parameter("to", to)
                 parameter("token", apiKey)
             }.body()
+            
+            println("FINNHUB_CANDLES_RAW: symbol=$symbol, status=${response.s}, count=${response.t.size}")
             
             if (response.s == "ok") {
                 response.t.indices.map { i ->
@@ -135,10 +139,15 @@ class FinnhubStockRepository(
 
     override suspend fun getCryptoSymbols(exchange: String): List<SymbolLookupResult> {
         return try {
-            val response: List<SymbolLookupResult> = client.get("https://finnhub.io/api/v1/crypto/symbol") {
+            val url = "https://finnhub.io/api/v1/crypto/symbol"
+            val responseText = client.get(url) {
                 parameter("exchange", exchange)
                 parameter("token", apiKey)
-            }.body()
+            }.body<String>()
+            
+            println("FINNHUB_CRYPTO_RAW: exchange=$exchange, length=${responseText.length}")
+            
+            val response: List<SymbolLookupResult> = Json { ignoreUnknownKeys = true }.decodeFromString(responseText)
             // Tving type til å være krypto siden dette endepunktet kun returnerer krypto
             response.map { it.copy(type = "CRYPTO") }
         } catch (e: Exception) {
@@ -187,7 +196,7 @@ class FinnhubStockRepository(
         } catch (e: Exception) {
             println("WebSocket error for $symbol: ${e.message}. Falling back to polling.")
             while (true) {
-                delay(10000)
+                delay(30000)
                 try {
                     emit(getStockPrice(symbol))
                 } catch (pe: Exception) {

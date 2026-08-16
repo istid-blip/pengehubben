@@ -42,6 +42,7 @@ fun App() {
             modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.background,
         ) {
+            println("APP_START: !!! THE_FORCE_IS_STRONG_WITH_THIS_ONE !!!")
             val authRepository = remember { AuthRepository() }
             val isAuthenticated by authRepository.isAuthenticated.collectAsState(initial = false)
 
