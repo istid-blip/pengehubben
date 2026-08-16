@@ -27,17 +27,17 @@ fun StockSearch(
     val results by viewModel.searchResults.collectAsState()
     val isSearching by viewModel.isSearching.collectAsState()
     var selectedTab by remember { mutableStateOf(0) }
-    val tabs = listOf("Stocks", "Forex", "Indices", "Crypto")
+    val tabs = listOf("All", "Stocks", "Forex", "Indices", "Crypto")
     
     val filteredResults = remember(results, selectedTab) {
-        val type = when (selectedTab) {
-            0 -> InstrumentType.STOCK
-            1 -> InstrumentType.FOREX
-            2 -> InstrumentType.INDEX
-            3 -> InstrumentType.CRYPTO
-            else -> InstrumentType.STOCK
+        when (selectedTab) {
+            0 -> results
+            1 -> results.filter { it.type == InstrumentType.STOCK }
+            2 -> results.filter { it.type == InstrumentType.FOREX }
+            3 -> results.filter { it.type == InstrumentType.INDEX }
+            4 -> results.filter { it.type == InstrumentType.CRYPTO }
+            else -> results
         }
-        results.filter { it.type == type }
     }
 
     Scaffold(

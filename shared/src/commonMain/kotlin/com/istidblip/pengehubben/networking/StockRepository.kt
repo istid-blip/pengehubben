@@ -58,7 +58,7 @@ data class SymbolLookupResult(
     val description: String,
     val displaySymbol: String,
     val symbol: String,
-    val type: String
+    val type: String = ""
 )
 
 class FinnhubStockRepository(
@@ -67,10 +67,20 @@ class FinnhubStockRepository(
 ) : StockRepository {
 
     override suspend fun getStockPrice(symbol: String): StockPrice {
-        return client.get("https://finnhub.io/api/v1/quote") {
-            parameter("symbol", symbol)
-            parameter("token", apiKey)
-        }.body()
+        return try {
+            val response = client.get("https://finnhub.io/api/v1/quote") {
+                parameter("symbol", symbol)
+                parameter("token", apiKey)
+            }
+            if (response.status.value in 200..299) {
+                response.body<StockPrice>()
+            } else {
+                StockPrice() // Return empty object with defaults
+            }
+        } catch (e: Exception) {
+            println("Error fetching stock price for $symbol: ${e.message}")
+            StockPrice()
+        }
     }
 
     override suspend fun searchSymbols(query: String): List<SymbolLookupResult> {
@@ -129,7 +139,8 @@ class FinnhubStockRepository(
                 parameter("exchange", exchange)
                 parameter("token", apiKey)
             }.body()
-            response
+            // Tving type til å være krypto siden dette endepunktet kun returnerer krypto
+            response.map { it.copy(type = "CRYPTO") }
         } catch (e: Exception) {
             println("Error fetching crypto symbols for $exchange: ${e.message}")
             emptyList()

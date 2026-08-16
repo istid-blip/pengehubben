@@ -139,11 +139,28 @@ class DashboardViewModel(
                         supabaseRepo.saveDashboardConfig(_modules.value)
                     }
                 }
-
-                // Pre-fetch crypto symbols for better search
-                _cryptoSymbols.value = stockRepo.getCryptoSymbols("BINANCE")
             } catch (e: Exception) {
                 println("Critical error in DashboardViewModel init: ${e.message}")
+            }
+        }
+
+        // Pre-fetch crypto symbols in a separate job so it doesn't wait for Supabase sync
+        println("DASHBOARD_VM: Starting crypto pre-fetch...")
+        viewModelScope.launch(exceptionHandler) {
+            try {
+                val exchanges = listOf("BINANCE", "COINBASE", "KRAKEN")
+                val allCrypto = mutableListOf<com.istidblip.pengehubben.networking.SymbolLookupResult>()
+                exchanges.forEach { exchange ->
+                    println("DASHBOARD_VM: Fetching from $exchange...")
+                    val symbols = stockRepo.getCryptoSymbols(exchange)
+                    println("DASHBOARD_VM: Received ${symbols.size} symbols from $exchange")
+                    allCrypto.addAll(symbols)
+                }
+                _cryptoSymbols.value = allCrypto
+                println("DASHBOARD_VM: Total crypto symbols available: ${allCrypto.size}")
+            } catch (e: Exception) {
+                println("DASHBOARD_VM: Error pre-fetching crypto: ${e.message}")
+                e.printStackTrace()
             }
         }
     }
@@ -159,7 +176,8 @@ class DashboardViewModel(
                 name = existingStock.name,
                 price = networkPrice.currentPrice,
                 change = networkPrice.percentChange,
-                timestamp = networkPrice.timestamp
+                timestamp = networkPrice.timestamp,
+                type = existingStock.type
             )
             currentModules[index] = DashboardModule.Stock(
                 id = (currentModules[index] as DashboardModule.Stock).id,
@@ -201,7 +219,9 @@ class DashboardViewModel(
                     type = when {
                         result.type.uppercase().contains("FOREX") || result.symbol.contains("/") -> InstrumentType.FOREX
                         result.type.uppercase().contains("INDEX") || result.type.uppercase().contains("INDICES") || result.symbol.startsWith("^") -> InstrumentType.INDEX
-                        result.type.uppercase().contains("CRYPTO") || result.symbol.contains(":") || result.description.uppercase().contains("BITCOIN") -> InstrumentType.CRYPTO
+                        result.type.uppercase().contains("CRYPTO") || result.symbol.contains(":") || 
+                        result.description.uppercase().contains("BITCOIN") || result.description.uppercase().contains("ETHEREUM") ||
+                        result.symbol.uppercase().contains("USDT") -> InstrumentType.CRYPTO
                         else -> InstrumentType.STOCK
                     }
                 )
