@@ -19,6 +19,7 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class TrackedStockEntity(
     val symbol: String,
+    val type: String = "STOCK",
     @EncodeDefault(EncodeDefault.Mode.NEVER)
     val user_id: String? = null
 )
@@ -33,19 +34,18 @@ data class DashboardConfigEntity(
 
 class SupabaseRepository {
     
-    suspend fun getTrackedStocks(): List<String> {
+    suspend fun getTrackedStocks(): List<TrackedStockEntity> {
         return try {
             Supabase.client.from("tracked_stocks")
-                .select(columns = Columns.list("symbol"))
+                .select(columns = Columns.list("symbol", "type"))
                 .decodeList<TrackedStockEntity>()
-                .map { it.symbol }
         } catch (e: Exception) {
             println("Error fetching tracked stocks: ${e.message}")
             emptyList()
         }
     }
 
-    fun getTrackedStocksFlow(): Flow<List<String>> = flow {
+    fun getTrackedStocksFlow(): Flow<List<TrackedStockEntity>> = flow {
         try {
             // Initial fetch
             emit(getTrackedStocks())
@@ -66,9 +66,9 @@ class SupabaseRepository {
         }
     }
 
-    suspend fun addTrackedStock(symbol: String) {
+    suspend fun addTrackedStock(symbol: String, type: String) {
         try {
-            Supabase.client.from("tracked_stocks").insert(TrackedStockEntity(symbol))
+            Supabase.client.from("tracked_stocks").insert(TrackedStockEntity(symbol, type))
         } catch (e: Exception) {
             println("Error adding tracked stock: ${e.message}")
         }

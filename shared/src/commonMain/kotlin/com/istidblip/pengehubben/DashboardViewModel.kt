@@ -64,6 +64,8 @@ class DashboardViewModel(
     private val _isEditMode = MutableStateFlow(false)
     val isEditMode: StateFlow<Boolean> = _isEditMode.asStateFlow()
 
+    private val _cryptoSymbols = MutableStateFlow<List<com.istidblip.pengehubben.networking.SymbolLookupResult>>(emptyList())
+
     private val observationJobs = mutableMapOf<String, Job>()
 
     init {
@@ -84,8 +86,10 @@ class DashboardViewModel(
                 }
 
                 // Sync with tracked stocks from Supabase
-                supabaseRepo.getTrackedStocksFlow().collectLatest { symbols ->
-                    println("Received ${symbols.size} tracked stocks from Supabase.")
+                supabaseRepo.getTrackedStocksFlow().collectLatest { entities ->
+                    println("Received ${entities.size} tracked stocks from Supabase.")
+                    
+                    val symbols = entities.map { it.symbol }
                     
                     // Stop observing stocks that are no longer tracked
                     val removedSymbols = observationJobs.keys - symbols.toSet()
@@ -109,15 +113,22 @@ class DashboardViewModel(
                     val currentStockModules = _modules.value.filterIsInstance<DashboardModule.Stock>()
                     val newModules = _modules.value.filter { it !is DashboardModule.Stock }.toMutableList()
                     
-                    symbols.forEach { symbol ->
-                        val existing = currentStockModules.find { it.stockPrice.symbol == symbol }
+                    entities.forEach { entity ->
+                        val existing = currentStockModules.find { it.stockPrice.symbol == entity.symbol }
                         if (existing != null) {
                             newModules.add(existing)
                         } else {
                             // Placeholder while loading
                             newModules.add(DashboardModule.Stock(
-                                id = "stock-${symbol.lowercase()}",
-                                stockPrice = StockPrice(symbol, null, 0.0, 0.0, 0)
+                                id = "stock-${entity.symbol.lowercase()}",
+                                stockPrice = StockPrice(
+                                    symbol = entity.symbol, 
+                                    name = null, 
+                                    price = 0.0, 
+                                    change = 0.0, 
+                                    timestamp = 0,
+                                    type = try { InstrumentType.valueOf(entity.type) } catch(e: Exception) { InstrumentType.STOCK }
+                                )
                             ))
                         }
                     }
@@ -128,6 +139,9 @@ class DashboardViewModel(
                         supabaseRepo.saveDashboardConfig(_modules.value)
                     }
                 }
+
+                // Pre-fetch crypto symbols for better search
+                _cryptoSymbols.value = stockRepo.getCryptoSymbols("BINANCE")
             } catch (e: Exception) {
                 println("Critical error in DashboardViewModel init: ${e.message}")
             }
@@ -166,14 +180,30 @@ class DashboardViewModel(
                 return@launch
             }
             _isSearching.value = true
-            val results = stockRepo.searchSymbols(query)
-            _searchResults.value = results.map { result ->
+            
+            val apiResults = stockRepo.searchSymbols(query)
+            
+            // For Crypto, we also search in our pre-fetched list
+            val cryptoQuery = query.uppercase()
+            val localCryptoResults = _cryptoSymbols.value.filter { 
+                it.symbol.contains(cryptoQuery) || it.description.uppercase().contains(cryptoQuery)
+            }.take(20)
+
+            val allResults = (apiResults + localCryptoResults).distinctBy { it.symbol }
+
+            _searchResults.value = allResults.map { result ->
                 StockPrice(
                     symbol = result.symbol,
                     name = result.description,
                     price = 0.0,
                     change = 0.0,
-                    timestamp = 0
+                    timestamp = 0,
+                    type = when {
+                        result.type.uppercase().contains("FOREX") || result.symbol.contains("/") -> InstrumentType.FOREX
+                        result.type.uppercase().contains("INDEX") || result.type.uppercase().contains("INDICES") || result.symbol.startsWith("^") -> InstrumentType.INDEX
+                        result.type.uppercase().contains("CRYPTO") || result.symbol.contains(":") || result.description.uppercase().contains("BITCOIN") -> InstrumentType.CRYPTO
+                        else -> InstrumentType.STOCK
+                    }
                 )
             }
             _isSearching.value = false
@@ -183,7 +213,7 @@ class DashboardViewModel(
     fun addStock(stock: StockPrice) {
         viewModelScope.launch {
             if (!_modules.value.filterIsInstance<DashboardModule.Stock>().any { it.stockPrice.symbol == stock.symbol }) {
-                supabaseRepo.addTrackedStock(stock.symbol)
+                supabaseRepo.addTrackedStock(stock.symbol, stock.type.name)
             }
         }
     }

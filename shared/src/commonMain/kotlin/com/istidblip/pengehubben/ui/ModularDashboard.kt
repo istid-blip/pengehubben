@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.istidblip.pengehubben.DashboardModule
 import com.istidblip.pengehubben.DashboardViewModel
+import com.istidblip.pengehubben.InstrumentType
 import com.istidblip.pengehubben.StockPrice
 import com.istidblip.pengehubben.TimeFrame
 import com.istidblip.pengehubben.formatCurrency
@@ -231,10 +232,21 @@ fun StockDetailPane(
                     .padding(padding)
                     .padding(16.dp)
             ) {
-                Text(
-                    text = stock.symbol,
-                    style = MaterialTheme.typography.displayMedium
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = stock.symbol,
+                        style = MaterialTheme.typography.displayMedium
+                    )
+                    if (stock.type != InstrumentType.STOCK) {
+                        Badge(
+                            modifier = Modifier.padding(start = 16.dp),
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                        ) {
+                            Text(stock.type.name, style = MaterialTheme.typography.labelLarge)
+                        }
+                    }
+                }
                 Text(
                     text = "Current Price: ${viewModel.getConvertedPrice(stock.price).formatCurrency(currency)}",
                     style = MaterialTheme.typography.headlineMedium

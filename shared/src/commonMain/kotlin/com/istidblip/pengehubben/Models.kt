@@ -3,12 +3,18 @@ package com.istidblip.pengehubben
 import kotlinx.serialization.Serializable
 
 @Serializable
+enum class InstrumentType {
+    STOCK, FOREX, INDEX, CRYPTO
+}
+
+@Serializable
 data class StockPrice(
     val symbol: String,
     val name: String? = null,
     val price: Double,
     val change: Double,
-    val timestamp: Long
+    val timestamp: Long,
+    val type: InstrumentType = InstrumentType.STOCK
 )
 
 @Serializable

@@ -15,6 +15,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.istidblip.pengehubben.InstrumentType
 import com.istidblip.pengehubben.StockPrice
 import com.istidblip.pengehubben.formatCurrency
 import org.jetbrains.compose.ui.tooling.preview.Preview
@@ -75,6 +77,24 @@ fun StockCard(
                         style = MaterialTheme.typography.titleLarge,
                         color = MaterialTheme.colorScheme.onSurface
                     )
+                    
+                    if (stock.type != InstrumentType.STOCK) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.secondaryContainer,
+                            shape = MaterialTheme.shapes.extraSmall,
+                            modifier = Modifier.padding(start = 8.dp)
+                        ) {
+                            Text(
+                                text = stock.type.name,
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.weight(1f))
+                    
                     Icon(
                         imageVector = trendIcon,
                         contentDescription = if (isPositive) "Up" else "Down",

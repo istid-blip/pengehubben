@@ -23,6 +23,7 @@ interface StockRepository {
     fun observeStockPrice(symbol: String): Flow<StockPrice>
     suspend fun searchSymbols(query: String): List<SymbolLookupResult>
     suspend fun getStockCandles(symbol: String, from: Long, to: Long, resolution: String = "D"): List<StockCandle>
+    suspend fun getCryptoSymbols(exchange: String): List<SymbolLookupResult>
 }
 
 @Serializable
@@ -74,13 +75,20 @@ class FinnhubStockRepository(
 
     override suspend fun searchSymbols(query: String): List<SymbolLookupResult> {
         return try {
-            val response: SymbolLookupResponse = client.get("https://finnhub.io/api/v1/search") {
+            val url = "https://finnhub.io/api/v1/search"
+            println("FINNHUB_SEARCH_CALL: url=$url?q=$query&token=$apiKey")
+            val response: SymbolLookupResponse = client.get(url) {
                 parameter("q", query)
                 parameter("token", apiKey)
             }.body()
+            println("FINNHUB_SEARCH_RAW: query=$query, count=${response.count}")
+            response.result.forEach { 
+                println("FINNHUB_RESULT: symbol=${it.symbol}, description=${it.description}, type=${it.type}")
+            }
             response.result
         } catch (e: Exception) {
             println("Error searching symbols: ${e.message}")
+            e.printStackTrace()
             emptyList()
         }
     }
@@ -111,6 +119,19 @@ class FinnhubStockRepository(
             }
         } catch (e: Exception) {
             println("Error fetching candles for $symbol: ${e.message}")
+            emptyList()
+        }
+    }
+
+    override suspend fun getCryptoSymbols(exchange: String): List<SymbolLookupResult> {
+        return try {
+            val response: List<SymbolLookupResult> = client.get("https://finnhub.io/api/v1/crypto/symbol") {
+                parameter("exchange", exchange)
+                parameter("token", apiKey)
+            }.body()
+            response
+        } catch (e: Exception) {
+            println("Error fetching crypto symbols for $exchange: ${e.message}")
             emptyList()
         }
     }
