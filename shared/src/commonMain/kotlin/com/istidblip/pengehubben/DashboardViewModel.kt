@@ -17,6 +17,14 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import io.ktor.util.date.GMTDate
 
+enum class TimeFrame(val label: String, val resolution: String) {
+    ONE_DAY("1D", "15"),
+    ONE_WEEK("1W", "60"),
+    ONE_MONTH("1M", "D"),
+    ONE_YEAR("1Y", "W"),
+    ALL("ALL", "M")
+}
+
 class DashboardViewModel(
     private val supabaseRepo: SupabaseRepository = SupabaseRepository(),
     private val stockRepo: StockRepository = FinnhubStockRepository(
@@ -49,6 +57,12 @@ class DashboardViewModel(
 
     private val _stockCandles = MutableStateFlow<List<com.istidblip.pengehubben.networking.StockCandle>>(emptyList())
     val stockCandles: StateFlow<List<com.istidblip.pengehubben.networking.StockCandle>> = _stockCandles.asStateFlow()
+
+    private val _selectedTimeFrame = MutableStateFlow(TimeFrame.ONE_MONTH)
+    val selectedTimeFrame: StateFlow<TimeFrame> = _selectedTimeFrame.asStateFlow()
+
+    private val _isEditMode = MutableStateFlow(false)
+    val isEditMode: StateFlow<Boolean> = _isEditMode.asStateFlow()
 
     private val observationJobs = mutableMapOf<String, Job>()
 
@@ -186,18 +200,51 @@ class DashboardViewModel(
     fun selectStock(stock: StockPrice?) {
         _selectedStock.value = stock
         if (stock != null) {
-            viewModelScope.launch {
-                try {
-                    // Bruker Ktor sin GMTDate som en trygg fallback for å få tid
-                    val nowSeconds = GMTDate().timestamp / 1000
-                    val thirtyDaysAgo = nowSeconds - (30 * 24 * 60 * 60)
-                    _stockCandles.value = stockRepo.getStockCandles(stock.symbol, thirtyDaysAgo, nowSeconds)
-                } catch (e: Exception) {
-                    println("Klarte ikke hente historikk: ${e.message}")
-                }
-            }
+            fetchCandles(stock.symbol, _selectedTimeFrame.value)
         } else {
             _stockCandles.value = emptyList()
+        }
+    }
+
+    fun setTimeFrame(timeFrame: TimeFrame) {
+        _selectedTimeFrame.value = timeFrame
+        _selectedStock.value?.let { stock ->
+            fetchCandles(stock.symbol, timeFrame)
+        }
+    }
+
+    private fun fetchCandles(symbol: String, timeFrame: TimeFrame) {
+        viewModelScope.launch {
+            try {
+                val nowSeconds = GMTDate().timestamp / 1000
+                val fromSeconds = when (timeFrame) {
+                    TimeFrame.ONE_DAY -> nowSeconds - (24 * 60 * 60)
+                    TimeFrame.ONE_WEEK -> nowSeconds - (7 * 24 * 60 * 60)
+                    TimeFrame.ONE_MONTH -> nowSeconds - (30 * 24 * 60 * 60)
+                    TimeFrame.ONE_YEAR -> nowSeconds - (365 * 24 * 60 * 60)
+                    TimeFrame.ALL -> nowSeconds - (10 * 365 * 24 * 60 * 60)
+                }
+                _stockCandles.value = stockRepo.getStockCandles(symbol, fromSeconds, nowSeconds, timeFrame.resolution)
+            } catch (e: Exception) {
+                println("Klarte ikke hente historikk: ${e.message}")
+            }
+        }
+    }
+
+    fun toggleEditMode() {
+        _isEditMode.value = !_isEditMode.value
+    }
+
+    fun removeModule(id: String) {
+        val moduleToRemove = _modules.value.find { it.id == id }
+        val currentModules = _modules.value.filter { it.id != id }
+        _modules.value = currentModules
+        
+        viewModelScope.launch {
+            if (moduleToRemove is DashboardModule.Stock) {
+                supabaseRepo.removeTrackedStock(moduleToRemove.stockPrice.symbol)
+            }
+            supabaseRepo.saveDashboardConfig(currentModules)
         }
     }
 

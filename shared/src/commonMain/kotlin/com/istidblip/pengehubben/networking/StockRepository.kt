@@ -22,7 +22,7 @@ interface StockRepository {
     suspend fun getStockPrice(symbol: String): StockPrice
     fun observeStockPrice(symbol: String): Flow<StockPrice>
     suspend fun searchSymbols(query: String): List<SymbolLookupResult>
-    suspend fun getStockCandles(symbol: String, from: Long, to: Long): List<StockCandle>
+    suspend fun getStockCandles(symbol: String, from: Long, to: Long, resolution: String = "D"): List<StockCandle>
 }
 
 @Serializable
@@ -85,11 +85,11 @@ class FinnhubStockRepository(
         }
     }
 
-    override suspend fun getStockCandles(symbol: String, from: Long, to: Long): List<StockCandle> {
+    override suspend fun getStockCandles(symbol: String, from: Long, to: Long, resolution: String): List<StockCandle> {
         return try {
             val response: StockCandleResponse = client.get("https://finnhub.io/api/v1/stock/candle") {
                 parameter("symbol", symbol)
-                parameter("resolution", "D")
+                parameter("resolution", resolution)
                 parameter("from", from)
                 parameter("to", to)
                 parameter("token", apiKey)

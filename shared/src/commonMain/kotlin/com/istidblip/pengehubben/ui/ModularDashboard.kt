@@ -7,7 +7,9 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.material3.adaptive.ExperimentalMaterial3AdaptiveApi
@@ -23,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import com.istidblip.pengehubben.DashboardModule
 import com.istidblip.pengehubben.DashboardViewModel
 import com.istidblip.pengehubben.StockPrice
+import com.istidblip.pengehubben.TimeFrame
 import com.istidblip.pengehubben.formatCurrency
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.ui.tooling.preview.Preview
@@ -81,27 +84,33 @@ fun DashboardListPane(
 ) {
     val currency by viewModel.selectedCurrency.collectAsState()
     val rate by viewModel.usdToNokRate.collectAsState()
+    val isEditMode by viewModel.isEditMode.collectAsState()
 
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
                 title = { 
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("Pengehubben 🔥")
+                        Text("Pengehubben")
                         if (currency == "NOK") {
                             Text("Rate: 1 USD = $rate NOK", style = MaterialTheme.typography.labelSmall)
                         }
                     }
                 },
+                navigationIcon = {
+                    IconButton(onClick = onLogout) {
+                        Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = "Logout")
+                    }
+                },
                 actions = {
+                    IconButton(onClick = { viewModel.toggleEditMode() }) {
+                        Icon(
+                            imageVector = if (isEditMode) Icons.Default.Close else Icons.Default.Edit,
+                            contentDescription = if (isEditMode) "Done" else "Edit Dashboard"
+                        )
+                    }
                     TextButton(onClick = { viewModel.toggleCurrency() }) {
                         Text(currency)
-                    }
-                    IconButton(onClick = onLogout) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ExitToApp,
-                            contentDescription = "Logout"
-                        )
                     }
                 }
             )
@@ -138,20 +147,42 @@ fun DashboardListPane(
                     modifier = Modifier.fillMaxSize()
                 ) {
                     items(modules) { module ->
-                        when (module) {
-                            is DashboardModule.Stock -> StockCard(
-                                stock = module.stockPrice.copy(
-                                    price = viewModel.getConvertedPrice(module.stockPrice.price)
-                                ),
-                                currencyCode = currency,
-                                onClick = { onStockClick(module.stockPrice) }
-                            )
-                            is DashboardModule.Summary -> SummaryCard(
-                                module = module.copy(
-                                    totalValue = viewModel.getConvertedPrice(module.totalValue)
-                                ),
-                                currencyCode = currency
-                            )
+                        Box {
+                            when (module) {
+                                is DashboardModule.Stock -> StockCard(
+                                    stock = module.stockPrice.copy(
+                                        price = viewModel.getConvertedPrice(module.stockPrice.price)
+                                    ),
+                                    currencyCode = currency,
+                                    onClick = { if (!isEditMode) onStockClick(module.stockPrice) }
+                                )
+                                is DashboardModule.Summary -> SummaryCard(
+                                    module = module.copy(
+                                        totalValue = viewModel.getConvertedPrice(module.totalValue)
+                                    ),
+                                    currencyCode = currency
+                                )
+                            }
+
+                            if (isEditMode) {
+                                IconButton(
+                                    onClick = { viewModel.removeModule(module.id) },
+                                    modifier = Modifier.align(Alignment.TopEnd)
+                                ) {
+                                    Surface(
+                                        shape = androidx.compose.foundation.shape.CircleShape,
+                                        color = MaterialTheme.colorScheme.errorContainer,
+                                        tonalElevation = 4.dp
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Close,
+                                            contentDescription = "Remove",
+                                            modifier = Modifier.padding(4.dp),
+                                            tint = MaterialTheme.colorScheme.onErrorContainer
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -169,6 +200,7 @@ fun StockDetailPane(
 ) {
     val candles by viewModel.stockCandles.collectAsState()
     val currency by viewModel.selectedCurrency.collectAsState()
+    val selectedTimeFrame by viewModel.selectedTimeFrame.collectAsState()
 
     Scaffold(
         topBar = {
@@ -216,11 +248,20 @@ fun StockDetailPane(
                 
                 Spacer(modifier = Modifier.height(32.dp))
                 
-                Text(
-                    text = "Last 30 Days",
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.padding(bottom = 8.dp)
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    TimeFrame.entries.forEach { timeFrame ->
+                        FilterChip(
+                            selected = selectedTimeFrame == timeFrame,
+                            onClick = { viewModel.setTimeFrame(timeFrame) },
+                            label = { Text(timeFrame.label) }
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
 
                 Card(
                     modifier = Modifier.fillMaxWidth().height(200.dp),
