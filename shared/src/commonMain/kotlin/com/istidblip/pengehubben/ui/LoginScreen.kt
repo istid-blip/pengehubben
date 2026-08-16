@@ -10,6 +10,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.autofill.ContentType
+import androidx.compose.ui.semantics.contentType
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -90,7 +93,9 @@ fun LoginScreen(
                 if (emailError) emailError = it.isBlank()
             },
             label = { Text("Email Address") },
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().semantics {
+                contentType = ContentType.EmailAddress
+            },
             isError = emailError,
             supportingText = if (emailError) {
                 { Text("Email cannot be empty") }
@@ -112,7 +117,9 @@ fun LoginScreen(
             },
             label = { Text("Password") },
             visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().semantics {
+                contentType = ContentType.Password
+            },
             isError = passwordError,
             supportingText = if (passwordError) {
                 { Text("Password cannot be empty") }

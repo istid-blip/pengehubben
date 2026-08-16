@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
@@ -30,7 +31,8 @@ import org.jetbrains.compose.ui.tooling.preview.Preview
 @Composable
 fun ModularDashboard(
     viewModel: DashboardViewModel,
-    onNavigateToSearch: () -> Unit
+    onNavigateToSearch: () -> Unit,
+    onLogout: () -> Unit
 ) {
     val modules by viewModel.modules.collectAsState()
     val selectedStock by viewModel.selectedStock.collectAsState()
@@ -50,7 +52,8 @@ fun ModularDashboard(
                         navigator.navigateTo(ListDetailPaneScaffoldRole.Detail, stock)
                     }
                 },
-                onNavigateToSearch = onNavigateToSearch
+                onNavigateToSearch = onNavigateToSearch,
+                onLogout = onLogout
             )
         },
         detailPane = {
@@ -73,7 +76,8 @@ fun DashboardListPane(
     modules: List<DashboardModule>,
     viewModel: DashboardViewModel,
     onStockClick: (StockPrice) -> Unit,
-    onNavigateToSearch: () -> Unit
+    onNavigateToSearch: () -> Unit,
+    onLogout: () -> Unit
 ) {
     val currency by viewModel.selectedCurrency.collectAsState()
     val rate by viewModel.usdToNokRate.collectAsState()
@@ -83,7 +87,7 @@ fun DashboardListPane(
             CenterAlignedTopAppBar(
                 title = { 
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("Pengehubben")
+                        Text("Pengehubben 🔥")
                         if (currency == "NOK") {
                             Text("Rate: 1 USD = $rate NOK", style = MaterialTheme.typography.labelSmall)
                         }
@@ -92,6 +96,12 @@ fun DashboardListPane(
                 actions = {
                     TextButton(onClick = { viewModel.toggleCurrency() }) {
                         Text(currency)
+                    }
+                    IconButton(onClick = onLogout) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ExitToApp,
+                            contentDescription = "Logout"
+                        )
                     }
                 }
             )

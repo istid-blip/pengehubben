@@ -8,6 +8,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
@@ -17,6 +18,7 @@ import com.istidblip.pengehubben.auth.AuthRepository
 import com.istidblip.pengehubben.ui.LoginScreen
 import com.istidblip.pengehubben.ui.ModularDashboard
 import com.istidblip.pengehubben.ui.StockSearch
+import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
@@ -43,8 +45,8 @@ fun App() {
             val authRepository = remember { AuthRepository() }
             val isAuthenticated by authRepository.isAuthenticated.collectAsState(initial = false)
 
-            val viewModel: DashboardViewModel = viewModel { DashboardViewModel() }
             val navController = rememberNavController()
+            val scope = rememberCoroutineScope()
 
             LaunchedEffect(isAuthenticated) {
                 if (isAuthenticated) {
@@ -76,12 +78,22 @@ fun App() {
                     )
                 }
                 composable<DashboardRoute> {
+                    val viewModel: DashboardViewModel = viewModel { DashboardViewModel() }
                     ModularDashboard(
                         viewModel = viewModel,
                         onNavigateToSearch = { navController.navigate(SearchRoute) },
+                        onLogout = {
+                            scope.launch {
+                                authRepository.signOut()
+                            }
+                        }
                     )
                 }
                 composable<SearchRoute> {
+                    val dashboardEntry = remember(it) {
+                        navController.getBackStackEntry(DashboardRoute)
+                    }
+                    val viewModel: DashboardViewModel = viewModel(dashboardEntry) { DashboardViewModel() }
                     StockSearch(
                         viewModel = viewModel,
                         onBack = { navController.popBackStack() },
